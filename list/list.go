@@ -1,0 +1,247 @@
+package list
+
+import (
+	"errors"
+	"fmt"
+	"iter"
+)
+
+// ErrSkipValue can be used in FilterMap callback function to indicate
+// that the current value is to be skipped.
+// It is not returned as an error by any function.
+var ErrSkipValue = errors.New("skip this value")
+
+type ErrOutOfRange struct {
+	length int
+	index  int
+}
+
+func (e ErrOutOfRange) Error() string {
+	return fmt.Sprintf("index out of range [%d] with length %d", e.index, e.length)
+}
+
+//	Map : []a, (a -> b) -> []b
+//
+// Map creates a new slice with the results of calling a provided
+// function on every element in given slice.
+func Map[S ~[]E1, E1, E2 any](s S, f func(E1) E2) []E2 {
+	if len(s) == 0 {
+		return nil
+	}
+
+	result := make([]E2, 0, len(s))
+
+	for _, elem := range s {
+		result = append(result, f(elem))
+	}
+
+	return result
+}
+
+//	MapSeq : Iterator[a], (a -> b) -> Iterator[b]
+//
+// MapSeq returns an iterator over mapped values of provided iterator.
+func MapSeq[S iter.Seq[E1], E1, E2 any](s S, f func(E1) E2) iter.Seq[E2] {
+	return func(yield func(E2) bool) {
+		for v := range s {
+			if !yield(f(v)) {
+				return
+			}
+		}
+	}
+}
+
+// func MapSeqWithSlice[S iter.Seq[E1], E1, E2 any](s S, f func(E1) E2) iter.Seq[E2] {
+// 	return slices.Values(Map(slices.Collect(s), f))
+// }
+
+//	Filter : []a, (a -> bool) -> []a
+//
+// Filter creates a new slice with only elements that match the predicate.
+func Filter[S ~[]E, E any](s S, f func(E) bool) []E {
+	var result []E
+
+	for _, elem := range s {
+		if f(elem) {
+			result = append(result, elem)
+		}
+	}
+
+	return result
+}
+
+//	FilterSeq : Iterator[a], (a -> bool) -> Iterator[a]
+//
+// FilterSeq returns an iterator over filtered values of provided iterator.
+func FilterSeq[S iter.Seq[E], E any](s S, f func(E) bool) iter.Seq[E] {
+	return func(yield func(E) bool) {
+		for v := range s {
+			if f(v) && !yield(v) {
+				return
+			}
+		}
+	}
+}
+
+//	FilterMap : []a, (a -> (b, error)) -> []b
+//
+// FilterMap creates a new slice with elements returned by
+// provided callback function. If the function returns non-nil error,
+// FilterMap skips the current element.
+func FilterMap[S ~[]E1, E1, E2 any](s S, f func(E1) (E2, error)) []E2 {
+	var result []E2
+
+	for _, elem := range s {
+		if resultElem, err := f(elem); err == nil {
+			result = append(result, resultElem)
+		}
+	}
+
+	return result
+}
+
+//	Every : []a, (a -> bool) -> bool
+//
+// Every returns true if all elements in the slice match the predicate,
+// false otherwise. Every always returns true for empty slice.
+func Every[S ~[]E, E any](s S, f func(E) bool) bool {
+	for _, elem := range s {
+		if !f(elem) {
+			return false
+		}
+	}
+
+	return true
+}
+
+//	EverySeq : iterator[a], (a -> bool) -> bool
+//
+// EverySeq is like Every but takes an iterator as an argument instead of a slice
+func EverySeq[S iter.Seq[E], E any](s S, f func(E) bool) bool {
+	for elem := range s {
+		if !f(elem) {
+			return false
+		}
+	}
+
+	return true
+}
+
+//	Reduce : []a, state, (state, a-> state) -> state
+//
+// Reduce applies a function against an state and each element
+// in the slice to reduce it to a single value.
+func Reduce[S ~[]E, E, State any](s S, init State, f func(State, E) State) State {
+	state := init
+
+	for _, elem := range s {
+		state = f(state, elem)
+	}
+
+	return state
+}
+
+//	ReduceSeq : iterator[a], state, (state, a -> state) -> state
+//
+// ReduceSeq is like Reduce but takes an iterator as an argument instead of a slice
+func ReduceSeq[S iter.Seq[E], E, State any](s S, init State, f func(State, E) State) State {
+	state := init
+
+	for elem := range s {
+		state = f(state, elem)
+	}
+
+	return state
+}
+
+//	Count : []a, (a -> bool) -> int
+//
+// Count returns the number of items in a given list matching the
+// predicate f.
+func Count[S ~[]E, E any](s S, f func(E) bool) int {
+	return Reduce(s, 0, func(state int, elem E) int {
+		if f(elem) {
+			return state + 1
+		}
+		return state
+	})
+}
+
+//	CountSeq : iterator[a], (a -> bool) -> int
+//
+// CountSeq is like Count but takes an iterator as an argument instead of a slice
+func CountSeq[S iter.Seq[E], E any](s S, f func(E) bool) int {
+	return ReduceSeq(s, 0, func(state int, elem E) int {
+		if f(elem) {
+			return state + 1
+		}
+		return state
+	})
+}
+
+// GroupByFunc splits a slice into sub-slices stored in a map, based on
+// the result of calling a key-returning function on each element,
+// and grouping the results according to values returned.
+func GroupByFunc[S ~[]V, K comparable, V any](s S, f func(V) K) map[K][]V {
+	result := make(map[K][]V)
+
+	for _, elem := range s {
+		key := f(elem)
+		result[key] = append(result[key], elem)
+	}
+
+	return result
+}
+
+// GroupByFuncSeq is like GroupByFunc but takes an iterator as an argument
+// instead of a slice
+func GroupByFuncSeq[S iter.Seq[V], K comparable, V any](s S, f func(V) K) map[K][]V {
+	result := make(map[K][]V)
+
+	for elem := range s {
+		key := f(elem)
+		result[key] = append(result[key], elem)
+	}
+
+	return result
+}
+
+// CountByFunc counts the elements of a slice according to how many match
+// each value of a key generated by the supplied function f. Returns
+// a map mapping the keys produced by f to the number of occurrences
+// in the slice.
+func CountByFunc[S ~[]V, K comparable, V any](s S, f func(V) K) map[K]int {
+	result := make(map[K]int)
+
+	for _, elem := range s {
+		key := f(elem)
+		result[key] += 1
+	}
+
+	return result
+}
+
+// CountByFuncSeq is like CountByFunc but takes an iterator as an argument
+// instead of a slice
+func CountByFuncSeq[S iter.Seq[V], K comparable, V any](s S, f func(V) K) map[K]int {
+	result := make(map[K]int)
+
+	for elem := range s {
+		key := f(elem)
+		result[key] += 1
+	}
+
+	return result
+}
+
+//	Get : []a, int -> a, [ErrOutOfRange]
+//
+// Get returns element at given index i when 0 <= i < len(s),
+// returns ErrOutOfRange otherwise.
+func Get[S ~[]E, E any](s []E, i int) (elem E, err error) {
+	if i < 0 || i >= len(s) {
+		return elem, ErrOutOfRange{length: len(s), index: i}
+	}
+
+	return s[i], err
+}
