@@ -26,7 +26,7 @@ var mapTestTable = map[int]struct {
 	},
 	3: {
 		input: nil,
-		want:  []int(nil),
+		want:  nil,
 	},
 }
 
@@ -62,7 +62,7 @@ var filterTestTable = map[int]struct {
 	},
 	3: {
 		input: nil,
-		want:  []int(nil),
+		want:  nil,
 	},
 }
 
@@ -105,7 +105,7 @@ func TestFilterMap(t *testing.T) {
 		},
 		4: {
 			input: nil,
-			want:  []int(nil),
+			want:  nil,
 		},
 	}
 
